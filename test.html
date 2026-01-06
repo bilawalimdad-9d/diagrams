@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mautrix-WhatsApp Bridge Architecture</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .tab-button {
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .tab-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .tab-button.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .diagram-container {
+            display: none;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            animation: fadeIn 0.5s ease;
+        }
+
+        .diagram-container.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .diagram-title {
+            font-size: 1.8em;
+            color: #667eea;
+            margin-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .diagram-description {
+            color: #555;
+            margin-bottom: 25px;
+            line-height: 1.6;
+            font-size: 1.05em;
+        }
+
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 30px;
+            border-radius: 5px;
+            border: 2px solid #333;
+        }
+
+        .critical {
+            background: #ff6b6b;
+        }
+
+        .optimize {
+            background: #ffd43b;
+        }
+
+        .external {
+            background: #74c0fc;
+        }
+
+        .storage {
+            background: #b197fc;
+        }
+
+        .process {
+            background: #51cf66;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .tab-button {
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+
+            .diagram-container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Mautrix-WhatsApp Bridge</h1>
+            <p class="subtitle">Technical Architecture Diagrams</p>
+        </header>
+
+        <div class="nav-tabs">
+            <button class="tab-button active" onclick="showDiagram('overview')">System Overview</button>
+            <button class="tab-button" onclick="showDiagram('incoming')">Incoming Flow</button>
+            <button class="tab-button" onclick="showDiagram('outgoing')">Outgoing Flow</button>
+            <button class="tab-button" onclick="showDiagram('history')">History Sync</button>
+            <button class="tab-button" onclick="showDiagram('auth')">Authentication</button>
+            <button class="tab-button" onclick="showDiagram('background')">Background Processes</button>
+        </div>
+
+        <div id="overview" class="diagram-container active">
+            <h2 class="diagram-title">System Overview</h2>
+            <p class="diagram-description">
+                High-level architecture showing the three-layer system: WhatsApp Protocol (whatsmeow),
+                Bridge Logic (mautrix-whatsapp), and Matrix Interface (mautrix-go).
+            </p>
+            <div class="mermaid">
+                graph TB
+                subgraph WAInfra["WhatsApp Infrastructure"]
+                WA[WhatsApp Servers]
+                WACDN[WhatsApp CDN]
+                end
+
+                subgraph BridgeApp["Bridge Application"]
+                CONNECTOR["WhatsAppConnector<br />Singleton Manager"]
+                CLIENT["WhatsAppClient<br />Per-User Instance"]
+                DB[(Bridge Database)]
+                end
+
+                subgraph WAProto["WhatsApp Protocol - whatsmeow"]
+                TRANSPORT["Transport Layer<br />WebSocket"]
+                PARSER[Protobuf Parser]
+                SIGNAL[Signal Protocol E2EE]
+                STORE[Device Store]
+                end
+
+                subgraph MXInterface["Matrix Interface - mautrix-go"]
+                APPSERVICE[Appservice API]
+                MXAPI[Client-Server API]
+                end
+
+                subgraph MXInfra["Matrix Infrastructure"]
+                MXHS[Matrix HomeServer]
+                MXCDN[Matrix Media Store]
+                end
+
+                WA <--> TRANSPORT
+                WACDN <--> CLIENT
+                TRANSPORT <--> PARSER
+                PARSER <--> SIGNAL
+                SIGNAL <--> CLIENT
+                STORE <--> CLIENT
+                CONNECTOR --> CLIENT
+                CLIENT <--> DB
+                CLIENT <--> APPSERVICE
+                APPSERVICE <--> MXHS
+                MXAPI <--> MXHS
+                MXHS <--> MXCDN
+
+                classDef external fill:#74c0fc,stroke:#1c7ed6,stroke-width:2px
+                classDef bridge fill:#51cf66,stroke:#2f9e44,stroke-width:2px
+                classDef storage fill:#b197fc,stroke:#7950f2,stroke-width:2px
+
+                class WA,WACDN,MXHS,MXCDN external
+                class CONNECTOR,CLIENT,TRANSPORT,PARSER,SIGNAL,APPSERVICE,MXAPI bridge
+                class DB,STORE storage
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color external"></div>
+                    <span>External Infrastructure</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color process"></div>
+                    <span>Bridge Components</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color storage"></div>
+                    <span>Data Storage</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="incoming" class="diagram-container">
+            <h2 class="diagram-title">Incoming Message Flow (WhatsApp to Matrix)</h2>
+            <p class="diagram-description">
+                Detailed flow showing how messages travel from WhatsApp users through the bridge to Matrix rooms,
+                including media processing and conversion steps.
+            </p>
+            <div class="mermaid">
+                graph TB
+                WA[WhatsApp User Sends Message]
+                WASERVER[WhatsApp Servers]
+                TRANSPORT[Transport Layer WebSocket Receive]
+                PARSER[Binary XML Parser]
+                SIGNAL[Signal Protocol Decrypt Message]
+                ROUTER[handleWAEvent Event Router]
+                HANDLER[handleWAMessage Message Handler]
+                CONV[from-whatsapp.go Message Converter]
+                DOWNLOAD[Download from WhatsApp CDN]
+                MEDIACONV[Media Conversion wa-media.go]
+                FFMPEG[ffmpeg Video Sticker Convert]
+                LOTTIE[lottieconverter Animated Stickers]
+                UPLOAD[Upload to Matrix Media Store]
+                APPSERVICE[Appservice API Send Event]
+                MXHS[Matrix HomeServer]
+                ROOM[Matrix Room Portal]
+
+                WA --> WASERVER
+                WASERVER --> TRANSPORT
+                TRANSPORT --> PARSER
+                PARSER --> SIGNAL
+                SIGNAL --> ROUTER
+                ROUTER --> HANDLER
+                HANDLER --> CONV
+                CONV --> DOWNLOAD
+                DOWNLOAD --> MEDIACONV
+                MEDIACONV --> LOTTIE
+                MEDIACONV --> FFMPEG
+                MEDIACONV --> UPLOAD
+                CONV --> APPSERVICE
+                UPLOAD --> APPSERVICE
+                APPSERVICE --> MXHS
+                MXHS --> ROOM
+
+                classDef critical fill:#ff6b6b,stroke:#c92a2a,stroke-width:3px,color:#fff
+                classDef process fill:#51cf66,stroke:#2f9e44,stroke-width:2px
+                classDef external fill:#74c0fc,stroke:#1c7ed6,stroke-width:2px
+
+                class FFMPEG,LOTTIE,MEDIACONV critical
+                class ROUTER,HANDLER,CONV,TRANSPORT,PARSER,SIGNAL,APPSERVICE process
+                class WA,WASERVER,MXHS,ROOM external
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color critical"></div>
+                    <span>Performance Hotspots</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color process"></div>
+                    <span>Processing Steps</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color external"></div>
+                    <span>External Systems</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="outgoing" class="diagram-container">
+            <h2 class="diagram-title">Outgoing Message Flow (Matrix to WhatsApp)</h2>
+            <p class="diagram-description">
+                Shows how messages from Matrix clients are converted and sent to WhatsApp, including
+                media format conversion, URL preview generation, and thumbnail creation.
+            </p>
+            <div class="mermaid">
+                graph TB
+                CLIENT[Matrix Client User Sends]
+                MXHS[Matrix HomeServer]
+                APPSERVICE[Appservice API Receive Transaction]
+                ROUTER[HandleMatrixMessage Event Router]
+                CONV[from-matrix.go Message Converter]
+                DLMX[Download from Matrix Media Store]
+                MEDIACONV[Media Conversion]
+                FFMPEG[ffmpeg GIF Video]
+                CWEBP[cwebp Sticker]
+                THUMB[Thumbnail Gen]
+                URLCHECK[Check for URLs]
+                URLFETCH[Fetch Preview]
+                URLIMG[Download Image]
+                URLTHUMB[Gen Thumbnail]
+                UPLOAD[Upload to WhatsApp CDN]
+                SIGNAL[Signal Protocol Encrypt Message]
+                TRANSPORT[Transport Layer WebSocket Send]
+                WASERVER[WhatsApp Servers]
+                WAUSER[WhatsApp User Receives Message]
+
+                CLIENT --> MXHS
+                MXHS --> APPSERVICE
+                APPSERVICE --> ROUTER
+                ROUTER --> CONV
+                CONV --> DLMX
+                DLMX --> MEDIACONV
+                MEDIACONV --> FFMPEG
+                MEDIACONV --> CWEBP
+                MEDIACONV --> THUMB
+                MEDIACONV --> UPLOAD
+                CONV --> URLCHECK
+                URLCHECK --> URLFETCH
+                URLFETCH --> URLIMG
+                URLIMG --> URLTHUMB
+                URLTHUMB --> UPLOAD
+                CONV --> SIGNAL
+                UPLOAD --> SIGNAL
+                SIGNAL --> TRANSPORT
+                TRANSPORT --> WASERVER
+                WASERVER --> WAUSER
+
+                classDef critical fill:#ff6b6b,stroke:#c92a2a,stroke-width:3px,color:#fff
+                classDef process fill:#51cf66,stroke:#2f9e44,stroke-width:2px
+                classDef external fill:#74c0fc,stroke:#1c7ed6,stroke-width:2px
+
+                class FFMPEG,CWEBP,THUMB,URLTHUMB,MEDIACONV,URLFETCH critical
+                class ROUTER,CONV,SIGNAL,TRANSPORT,APPSERVICE process
+                class CLIENT,MXHS,WASERVER,WAUSER external
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color critical"></div>
+                    <span>CPU-Intensive Operations</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color process"></div>
+                    <span>Bridge Processing</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color external"></div>
+                    <span>External Systems</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="history" class="diagram-container">
+            <h2 class="diagram-title">History Sync Process</h2>
+            <p class="diagram-description">
+                The multi-stage process of receiving, decrypting, and backfilling WhatsApp chat history
+                into Matrix rooms during initial synchronization.
+            </p>
+            <div class="mermaid">
+                graph TB
+                START[User Authenticates]
+                HSEVENT[HistorySync Event]
+                DLBLOB[Download Blob]
+                DECRYPT[Decrypt AES-256]
+                DECOMPRESS[Decompress zlib]
+                PARSE[Parse Protobuf]
+                EXTRACT[Extract Messages]
+                DB[(Bridge Database)]
+                HISTTABLE[history_sync_message]
+                CONVO[history_sync_conversation]
+                HISTLOOP[History Sync Loop]
+                LIMIT{Max Convos?}
+                CREATE[Create Matrix Room]
+                SYNC[Sync Metadata]
+                BACKFILL[Backfill Messages]
+                MEDIA[Media Download]
+                MEDIATABLE[media_backfill_request]
+                INSERT[Insert into Matrix]
+                COMPLETE[Sync Complete]
+
+                START --> HSEVENT
+                HSEVENT --> DLBLOB
+                DLBLOB --> DECRYPT
+                DECRYPT --> DECOMPRESS
+                DECOMPRESS --> PARSE
+                PARSE --> EXTRACT
+                EXTRACT --> HISTTABLE
+                EXTRACT --> CONVO
+                HISTTABLE --> HISTLOOP
+                CONVO --> HISTLOOP
+                HISTLOOP --> LIMIT
+                LIMIT --> CREATE
+                LIMIT --> COMPLETE
+                CREATE --> SYNC
+                SYNC --> BACKFILL
+                BACKFILL --> MEDIA
+                MEDIA --> MEDIATABLE
+                BACKFILL --> INSERT
+                INSERT --> HISTLOOP
+                MEDIATABLE --> COMPLETE
+
+                classDef optimize fill:#ffd43b,stroke:#fab005,stroke-width:2px,color:#000
+                classDef storage fill:#b197fc,stroke:#7950f2,stroke-width:2px
+                classDef process fill:#51cf66,stroke:#2f9e44,stroke-width:2px
+                classDef critical fill:#ff6b6b,stroke:#c92a2a,stroke-width:3px,color:#fff
+
+                class HISTLOOP,LIMIT optimize
+                class DB,HISTTABLE,CONVO,MEDIATABLE storage
+                class DECRYPT,DECOMPRESS,PARSE,EXTRACT,CREATE,SYNC,INSERT process
+                class BACKFILL,MEDIA critical
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color optimize"></div>
+                    <span>Optimization Targets</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color critical"></div>
+                    <span>Resource-Intensive</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color process"></div>
+                    <span>Processing Steps</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color storage"></div>
+                    <span>Database Tables</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="auth" class="diagram-container">
+            <h2 class="diagram-title">Authentication and Login Flow</h2>
+            <p class="diagram-description">
+                Details the QR code and phone code authentication methods, showing the Noise Protocol
+                handshake and session establishment process.
+            </p>
+            <div class="mermaid">
+                graph TB
+                START[Bridge Started]
+                USER[User Initiates Login]
+                CHOICE{Method?}
+                QR[QR Code Login]
+                PHONE[Phone Code Login]
+                GENKEYS[Generate Key Pair]
+                GENQR[Generate QR Code]
+                DISPLAY[Display QR Code]
+                SCAN[User Scans]
+                REQCODE[Request Code]
+                SENDCODE[Send SMS]
+                ENTERCODE[Enter Code]
+                NOISE1[Client Hello]
+                NOISE2[Server Hello]
+                NOISE3[Key Exchange]
+                NOISE4[Establish WebSocket]
+                GETKEYS[Retrieve Keys]
+                STORE[Store Session]
+                DBSAVE[Save Credentials]
+                TRANS[WebSocket Connection]
+                PERSIST[Maintain Connection]
+                CONNECTED[User Connected]
+
+                START --> USER
+                USER --> CHOICE
+                CHOICE --> QR
+                CHOICE --> PHONE
+                QR --> GENKEYS
+                GENKEYS --> GENQR
+                GENQR --> DISPLAY
+                DISPLAY --> SCAN
+                SCAN --> NOISE1
+                PHONE --> REQCODE
+                REQCODE --> SENDCODE
+                SENDCODE --> ENTERCODE
+                ENTERCODE --> NOISE1
+                NOISE1 --> NOISE2
+                NOISE2 --> NOISE3
+                NOISE3 --> NOISE4
+                NOISE4 --> GETKEYS
+                GETKEYS --> STORE
+                STORE --> DBSAVE
+                DBSAVE --> TRANS
+                TRANS --> PERSIST
+                PERSIST --> CONNECTED
+
+                classDef process fill:#51cf66,stroke:#2f9e44,stroke-width:2px
+                classDef storage fill:#b197fc,stroke:#7950f2,stroke-width:2px
+                classDef external fill:#74c0fc,stroke:#1c7ed6,stroke-width:2px
+
+                class GENKEYS,GENQR,REQCODE,NOISE1,NOISE2,NOISE3,NOISE4,GETKEYS process
+                class STORE,DBSAVE storage
+                class USER,SCAN,SENDCODE,ENTERCODE,TRANS,PERSIST external
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color process"></div>
+                    <span>Cryptographic Operations</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color storage"></div>
+                    <span>Persistent Storage</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color external"></div>
+                    <span>User/Network Interaction</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="background" class="diagram-container">
+            <h2 class="diagram-title">Background Processes and Loops</h2>
+            <p class="diagram-description">
+                Continuous background operations that maintain synchronization, including history sync,
+                user information updates, and media download management.
+            </p>
+            <div class="mermaid">
+                graph TB
+                CLIENT[WhatsAppClient]
+                HISTLOOP[History Sync Loop]
+                HISTCHAN[historySyncs Channel]
+                HISTPROC[Process Blob]
+                CREATEPORT[Create Portals]
+                HISTDB[(history_sync_message)]
+                GHOSTLOOP[Ghost Loop 4h Interval]
+                CHECKTIME{Last Sync Over 7d?}
+                FETCHINFO[Fetch User Info]
+                FETCHAVATAR[Download Avatar]
+                UPDATEPUPPET[Update Puppet]
+                AVATARCACHE[(avatar_cache)]
+                MEDIALOOP[Media Loop]
+                MEDIAQ[Request Queue]
+                CHECKFAIL{Failed Downloads?}
+                RETRY[Retry Download]
+                MEDIATABLE[(media_backfill_request)]
+                UPDATESTATUS[Update Status]
+                CFG[config.yaml]
+                MAXCONV[max_initial_conversations]
+                AUTOMEDIA[auto_request_media]
+                RESYNCINT[ResyncLoopInterval 4h]
+
+                CLIENT --> HISTLOOP
+                CLIENT --> GHOSTLOOP
+                CLIENT --> MEDIALOOP
+                HISTLOOP --> HISTCHAN
+                HISTCHAN --> HISTPROC
+                HISTPROC --> CREATEPORT
+                CREATEPORT --> HISTDB
+                HISTDB --> HISTLOOP
+                GHOSTLOOP --> CHECKTIME
+                CHECKTIME --> FETCHINFO
+                CHECKTIME --> GHOSTLOOP
+                FETCHINFO --> FETCHAVATAR
+                FETCHAVATAR --> AVATARCACHE
+                AVATARCACHE --> UPDATEPUPPET
+                UPDATEPUPPET --> GHOSTLOOP
+                MEDIALOOP --> MEDIAQ
+                MEDIAQ --> CHECKFAIL
+                CHECKFAIL --> RETRY
+                CHECKFAIL --> MEDIALOOP
+                RETRY --> MEDIATABLE
+                MEDIATABLE --> UPDATESTATUS
+                UPDATESTATUS --> MEDIALOOP
+                CFG --> MAXCONV
+                CFG --> AUTOMEDIA
+                CFG --> RESYNCINT
+                MAXCONV -.-> CREATEPORT
+                AUTOMEDIA -.-> MEDIAQ
+                RESYNCINT -.-> GHOSTLOOP
+
+                classDef optimize fill:#ffd43b,stroke:#fab005,stroke-width:2px,color:#000
+                classDef storage fill:#b197fc,stroke:#7950f2,stroke-width:2px
+                classDef process fill:#51cf66,stroke:#2f9e44,stroke-width:2px
+                classDef config fill:#ff8787,stroke:#fa5252,stroke-width:2px
+
+                class HISTLOOP,GHOSTLOOP,MEDIALOOP,MAXCONV,AUTOMEDIA,RESYNCINT optimize
+                class HISTDB,AVATARCACHE,MEDIATABLE storage
+                class HISTPROC,CREATEPORT,FETCHINFO,FETCHAVATAR,UPDATEPUPPET,RETRY,UPDATESTATUS process
+                class CFG config
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color optimize"></div>
+                    <span>Optimization Targets</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color process"></div>
+                    <span>Processing Operations</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color storage"></div>
+                    <span>Database Tables</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color config"></div>
+                    <span>Configuration</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+
+        async function renderDiagram(containerId) {
+            const container = document.getElementById(containerId);
+            // Find the .mermaid div inside this container
+            const graphDefinition = container.querySelector('.mermaid');
+
+            // Only render if it hasn't been processed yet and exists
+            if (graphDefinition && !graphDefinition.getAttribute('data-processed')) {
+                try {
+                    await mermaid.run({
+                        nodes: [graphDefinition]
+                    });
+                } catch (error) {
+                    console.error('Mermaid rendering failed:', error);
+                }
+            }
+        }
+
+        function showDiagram(diagramId) {
+            document.querySelectorAll('.diagram-container').forEach(container => {
+                container.classList.remove('active');
+            });
+
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+
+            const activeContainer = document.getElementById(diagramId);
+            activeContainer.classList.add('active');
+
+            // Find the button that triggered this or corresponds to this diagramId
+            const button = Array.from(document.querySelectorAll('.tab-button')).find(btn =>
+                btn.getAttribute('onclick').includes(`'${diagramId}'`)
+            );
+            if (button) {
+                button.classList.add('active');
+            }
+
+            // Render the diagram after it becomes visible
+            requestAnimationFrame(() => {
+                renderDiagram(diagramId);
+            });
+        }
+
+        // Initial render
+        document.addEventListener('DOMContentLoaded', () => {
+            renderDiagram('overview');
+        });
+    </script>
+</body>
+
+</html>
